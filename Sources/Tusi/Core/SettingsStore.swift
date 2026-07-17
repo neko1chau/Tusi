@@ -1,0 +1,204 @@
+import Foundation
+import Combine
+import ServiceManagement
+
+struct APIConfig: Equatable {
+    var baseURL: String
+    var apiKey: String
+    var model: String
+    /// Comma/whitespace-separated backend names (e.g. "novita, together") sent as
+    /// OpenRouter's `provider.order` routing hint. Ignored by gateways that don't
+    /// understand the field, so it's safe to leave set when switching profiles.
+    var providerOrder: String = ""
+
+    var isUsable: Bool {
+        !baseURL.trimmingCharacters(in: .whitespaces).isEmpty
+            && !apiKey.isEmpty
+            && !model.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Host of the base URL, used as a display name for the slot ("api.deepseek.com").
+    var displayHost: String {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return "" }
+        let withScheme = trimmed.contains("://") ? trimmed : "https://" + trimmed
+        return URL(string: withScheme)?.host ?? ""
+    }
+
+    /// Parsed provider names, in the order they should be tried.
+    var providerOrderList: [String] {
+        providerOrder
+            .split(whereSeparator: { $0 == "," || $0.isWhitespace })
+            .map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            .filter { !$0.isEmpty }
+    }
+}
+
+/// One of the two BYOK slots. Everything is user-typed — no baked-in providers.
+struct APIProfile: Equatable {
+    var baseURL = ""
+    var apiKey = ""
+    var model = ""
+    var providerOrder = ""
+
+    var config: APIConfig {
+        APIConfig(baseURL: baseURL, apiKey: apiKey, model: model, providerOrder: providerOrder)
+    }
+    var isUsable: Bool { config.isUsable }
+}
+
+@MainActor
+final class SettingsStore: ObservableObject {
+    private let defaults: UserDefaults
+    /// TUSI_PREVIEW runs against a throwaway suite and never touches the Keychain,
+    /// so screenshot runs can't clobber real credentials.
+    private let isPreview: Bool
+
+    /// Exactly two slots: index 0 and index 1.
+    @Published var profiles: [APIProfile] = [APIProfile(), APIProfile()] {
+        didSet { persistProfiles(previous: oldValue) }
+    }
+
+    /// Which slot is tried first. The other one is the fallback.
+    @Published var primaryIndex: Int {
+        didSet { defaults.set(primaryIndex, forKey: "primaryIndex") }
+    }
+    @Published var fallbackEnabled: Bool {
+        didSet { defaults.set(fallbackEnabled, forKey: "fallbackEnabled") }
+    }
+    @Published var autoCopy: Bool {
+        didSet { defaults.set(autoCopy, forKey: "autoCopy") }
+    }
+    @Published var tone: Tone {
+        didSet { defaults.set(tone.rawValue, forKey: "tone") }
+    }
+    @Published var copyShortcut: KeyCombo {
+        didSet {
+            defaults.set(Int(copyShortcut.keyCode), forKey: "copyShortcut.keyCode")
+            defaults.set(Int(copyShortcut.modifiers), forKey: "copyShortcut.modifiers")
+            defaults.set(copyShortcut.display, forKey: "copyShortcut.display")
+        }
+    }
+    /// Optional freeform instruction appended to the system prompt — glossary entries,
+    /// formatting rules, house style. Additive on purpose: it can't replace the
+    /// "output only the translation" contract the rest of the app depends on.
+    @Published var extraInstruction: String {
+        didSet { defaults.set(extraInstruction, forKey: "extraInstruction") }
+    }
+    @Published var launchAtLogin: Bool {
+        didSet {
+            guard launchAtLogin != oldValue else { return }
+            do {
+                if launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                // Reverts silently when not running from a proper .app bundle.
+                launchAtLogin = oldValue
+            }
+        }
+    }
+
+    init() {
+        isPreview = ProcessInfo.processInfo.environment["TUSI_PREVIEW"] != nil
+        if isPreview {
+            let suite = "com.tusi.preview.scratch"
+            UserDefaults.standard.removePersistentDomain(forName: suite)
+            defaults = UserDefaults(suiteName: suite) ?? .standard
+        } else {
+            defaults = .standard
+        }
+
+        primaryIndex = defaults.object(forKey: "primaryIndex") as? Int == 1 ? 1 : 0
+        fallbackEnabled = defaults.object(forKey: "fallbackEnabled") as? Bool ?? true
+        autoCopy = defaults.object(forKey: "autoCopy") as? Bool ?? true
+        tone = Tone(rawValue: defaults.string(forKey: "tone") ?? "") ?? .standard
+        extraInstruction = defaults.string(forKey: "extraInstruction") ?? ""
+        if let display = defaults.string(forKey: "copyShortcut.display"),
+           defaults.object(forKey: "copyShortcut.keyCode") != nil {
+            copyShortcut = KeyCombo(
+                keyCode: UInt16(defaults.integer(forKey: "copyShortcut.keyCode")),
+                modifiers: UInt(defaults.integer(forKey: "copyShortcut.modifiers")),
+                display: display
+            )
+        } else {
+            copyShortcut = .defaultCopy
+        }
+        launchAtLogin = SMAppService.mainApp.status == .enabled
+        profiles = isPreview ? [APIProfile(), APIProfile()] : Self.loadProfiles(defaults: defaults)
+    }
+
+    // MARK: - Persistence
+
+    private static func loadProfiles(defaults: UserDefaults) -> [APIProfile] {
+        // Pre-slot installs kept the primary's URL and model under unsuffixed keys.
+        if !defaults.bool(forKey: "didMigrateProfiles") {
+            defaults.set(true, forKey: "didMigrateProfiles")
+            if let oldBase = defaults.string(forKey: "baseURL"), !oldBase.isEmpty {
+                defaults.set(oldBase, forKey: "baseURL.0")
+                defaults.set(defaults.string(forKey: "model") ?? "", forKey: "model.0")
+                defaults.removeObject(forKey: "baseURL")
+                defaults.removeObject(forKey: "model")
+            }
+        }
+
+        // One read for both slots — see Keychain for why that matters.
+        let keys = Keychain.migrateLegacyKeysIfNeeded() ?? Keychain.loadKeys()
+
+        return (0...1).map { index in
+            APIProfile(
+                baseURL: defaults.string(forKey: "baseURL.\(index)") ?? "",
+                apiKey: keys[index] ?? "",
+                model: defaults.string(forKey: "model.\(index)") ?? "",
+                providerOrder: defaults.string(forKey: "providerOrder.\(index)") ?? ""
+            )
+        }
+    }
+
+    private func persistProfiles(previous: [APIProfile]) {
+        guard !isPreview else { return }
+        for index in profiles.indices {
+            let profile = profiles[index]
+            defaults.set(profile.baseURL, forKey: "baseURL.\(index)")
+            defaults.set(profile.model, forKey: "model.\(index)")
+            defaults.set(profile.providerOrder, forKey: "providerOrder.\(index)")
+        }
+
+        let keysChanged = zip(profiles, previous).contains { $0.apiKey != $1.apiKey }
+            || profiles.count != previous.count
+        guard keysChanged else { return }
+        Keychain.saveKeys(
+            profiles.enumerated().reduce(into: [Int: String]()) { $0[$1.offset] = $1.element.apiKey }
+        )
+    }
+
+    // MARK: - Resolution
+
+    var fallbackIndex: Int { primaryIndex == 0 ? 1 : 0 }
+
+    var isConfigured: Bool { profiles.contains { $0.isUsable } }
+
+    /// Slots to try, in order: primary first, then the fallback if enabled and filled in.
+    /// Unusable slots are skipped so a half-filled backup never breaks a working primary.
+    var resolvedChain: [(index: Int, config: APIConfig)] {
+        var chain: [(Int, APIConfig)] = []
+        if profiles[primaryIndex].isUsable {
+            chain.append((primaryIndex, profiles[primaryIndex].config))
+        }
+        if fallbackEnabled, profiles[fallbackIndex].isUsable {
+            chain.append((fallbackIndex, profiles[fallbackIndex].config))
+        }
+        return chain
+    }
+
+    /// Slot label for the tabs. Truncated here rather than with a fixed-width
+    /// frame so the tab capsule hugs its text instead of reserving dead space.
+    func label(for index: Int) -> String {
+        let host = profiles[index].config.displayHost
+        guard !host.isEmpty else { return "未配置" }
+        guard host.count > 22 else { return host }
+        return host.prefix(11) + "…" + host.suffix(8)
+    }
+}
