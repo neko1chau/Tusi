@@ -2,7 +2,7 @@
   <img src="Resources/icon-preview.png" width="128" height="128" alt="Tusi icon">
 </p>
 
-<h1 align="center">Tusi 兔斯</h1>
+<h1 align="center">Tusi</h1>
 <p align="center">macOS 菜单栏翻译工具，只做一件事，但做到随手即走。</p>
 
 ## 能做的事
