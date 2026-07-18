@@ -101,8 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = statusItem.button {
+            // `translate` is an SF Symbols 6 / macOS 15 symbol; on macOS 13–14 it's nil
+            // and we fall back to the filled speech bubble (the hollow one looked too faint
+            // in the menu bar).
             let image = NSImage(systemSymbolName: "translate", accessibilityDescription: "Tusi")
-                ?? NSImage(systemSymbolName: "character.bubble", accessibilityDescription: "Tusi")
+                ?? NSImage(systemSymbolName: "character.bubble.fill", accessibilityDescription: "Tusi")
             image?.isTemplate = true
             button.image = image
             button.target = self
