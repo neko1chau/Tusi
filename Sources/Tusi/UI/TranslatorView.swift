@@ -17,8 +17,19 @@ struct TranslatorView: View {
     @FocusState private var inputFocused: Bool
     @State private var resultHeight: CGFloat = 20
 
-    private let maxInputHeight: CGFloat = 132
-    private let maxResultHeight: CGFloat = 300
+    // Line geometry for the 15pt content font with lineSpacing 3, measured empirically:
+    // the first line is 19pt and every line after adds 22pt. Input (AppKit metrics) and
+    // result (SwiftUI Text) both come out to these same numbers.
+    private let firstLineHeight: CGFloat = 19
+    private let lineStep: CGFloat = 22
+    private func height(lines: Int) -> CGFloat { firstLineHeight + CGFloat(lines - 1) * lineStep }
+
+    // Caps expressed as whole lines so a clamped view never cuts a line in half — the panel
+    // grows to fit short content, and long content scrolls inside a whole-line viewport.
+    // The input's cap sits exactly on the 6-line boundary (no +2 fudge): the scrolling
+    // TextEditor's inset otherwise pushed the cap ~2pt into the 7th line, showing a sliver.
+    private var maxInputHeight: CGFloat { height(lines: 6) }
+    private var maxResultHeight: CGFloat { height(lines: 14) }
 
     // Panel width minus horizontal padding (16 × 2) and NSTextView's line fragment padding (5 × 2).
     private let editorTextWidth: CGFloat = PanelController.panelWidth - 32 - 10

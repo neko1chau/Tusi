@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     let settings = SettingsStore()
     let panelState = PanelState()
+    let updateChecker = UpdateChecker()
     lazy var engine = TranslationEngine(settings: settings)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -20,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             engine: engine,
             settings: settings,
             panelState: panelState,
+            updateChecker: updateChecker,
             statusItem: statusItem
         )
         hotkey = HotkeyManager { [weak self] in
@@ -36,6 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] combo in self?.registerSummonHotkey(combo) }
             .store(in: &cancellables)
 
+        // The status menu is rebuilt on every right-click, so a found update surfaces
+        // there passively next time it's opened — no push needed.
+        if settings.autoCheckUpdates {
+            updateChecker.check(manual: false)
+        }
+
         // First run without a usable profile: open the panel so setup is obvious.
         if !settings.isConfigured {
             panelController.show()
@@ -49,12 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panelState.pinned = true
             panelController.show()
             switch preview {
-            case "settings":
+            case "settings", "update-available", "update-latest":
                 settings.profiles = [
                     APIProfile(baseURL: "https://api.deepseek.com", apiKey: "sk-preview", model: "deepseek-chat"),
                     APIProfile(baseURL: "https://openrouter.ai/api/v1", apiKey: "sk-preview", model: "deepseek/deepseek-chat"),
                 ]
                 panelState.showSettings = true
+                if preview == "update-available" {
+                    updateChecker.debugSetState(.available(version: "1.3.0", url: URL(string: "https://github.com/neko1chau/Tusi/releases/latest")!))
+                } else if preview == "update-latest" {
+                    updateChecker.debugSetState(.upToDate)
+                }
             case "empty":
                 panelState.showSettings = false
             case "quotetest":
@@ -137,6 +150,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showStatusMenu() {
         let menu = NSMenu()
+
+        // An available update surfaces at the top, so it's discoverable without opening
+        // Settings. The menu is rebuilt on each right-click, so this stays current.
+        if let update = updateChecker.pendingUpdate {
+            let item = NSMenuItem(
+                title: String(format: L("有新版本 %@ →"), update.version),
+                action: #selector(openUpdatePage),
+                keyEquivalent: ""
+            )
+            item.target = self
+            menu.addItem(item)
+            menu.addItem(.separator())
+        }
+
         // No keyEquivalent hint here — the summon shortcut is user-configurable, and a
         // fixed ⌥Space label would just be wrong. Settings shows the real binding.
         let openItem = NSMenuItem(title: L("打开翻译面板"), action: #selector(openPanel), keyEquivalent: "")
@@ -162,6 +189,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() {
         panelState.showSettings = true
         panelController.show()
+    }
+
+    @objc private func openUpdatePage() {
+        if let url = updateChecker.pendingUpdate?.url {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     private func togglePanel() {

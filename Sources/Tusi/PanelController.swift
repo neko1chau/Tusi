@@ -19,6 +19,7 @@ final class PanelController {
     private let engine: TranslationEngine
     private let settings: SettingsStore
     private let panelState: PanelState
+    private let updateChecker: UpdateChecker
     private weak var statusItem: NSStatusItem?
 
     private var keyMonitor: Any?
@@ -26,10 +27,11 @@ final class PanelController {
     private var desiredHeight: CGFloat = 160
     private var hasShownOnce = false
 
-    init(engine: TranslationEngine, settings: SettingsStore, panelState: PanelState, statusItem: NSStatusItem?) {
+    init(engine: TranslationEngine, settings: SettingsStore, panelState: PanelState, updateChecker: UpdateChecker, statusItem: NSStatusItem?) {
         self.engine = engine
         self.settings = settings
         self.panelState = panelState
+        self.updateChecker = updateChecker
         self.statusItem = statusItem
 
         panel = FloatingPanel(
@@ -55,6 +57,7 @@ final class PanelController {
         .environmentObject(engine)
         .environmentObject(settings)
         .environmentObject(panelState)
+        .environmentObject(updateChecker)
 
         let container = PanelContainerView(cornerRadius: Theme.cornerRadius)
         container.frame = panel.contentRect(forFrameRect: panel.frame)

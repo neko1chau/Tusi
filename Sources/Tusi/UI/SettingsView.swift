@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var settings: SettingsStore
     @EnvironmentObject private var panelState: PanelState
+    @EnvironmentObject private var updateChecker: UpdateChecker
 
     @State private var editingIndex = 0
     @State private var showKey = false
@@ -64,6 +65,14 @@ struct SettingsView: View {
                 }
             }
 
+            HStack(spacing: 5) {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 9))
+                Text("API Key 仅保存在本机钥匙串，不会上传")
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+
             testRow
 
             SoftDivider()
@@ -80,9 +89,10 @@ struct SettingsView: View {
             shortcutsSection
 
             VStack(alignment: .leading, spacing: 10) {
-                Toggle("主用失败时自动切换到备用", isOn: $settings.fallbackEnabled)
-                Toggle("翻译完成后自动复制", isOn: $settings.autoCopy)
-                Toggle("登录时启动", isOn: $settings.launchAtLogin)
+                settingToggle("主用失败时自动切换到备用", isOn: $settings.fallbackEnabled)
+                settingToggle("翻译完成后自动复制", isOn: $settings.autoCopy)
+                settingToggle("登录时启动", isOn: $settings.launchAtLogin)
+                updateSettingRow
             }
             .toggleStyle(.switch)
             .controlSize(.mini)
@@ -98,14 +108,6 @@ struct SettingsView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(.orange)
             }
-
-            HStack(spacing: 5) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 9))
-                Text("API Key 仅保存在本机钥匙串，不会上传")
-            }
-            .font(.system(size: 10.5))
-            .foregroundStyle(.secondary)
         }
         .padding(18)
         .onChange(of: settings.profiles) { _ in testStates[editingIndex] = .idle }
@@ -218,6 +220,83 @@ struct SettingsView: View {
             )
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: - Toggles
+
+    /// Label left, switch right — so every switch lines up in one column regardless of how
+    /// long its label is.
+    private func settingToggle(_ label: LocalizedStringKey, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(label)
+            Spacer(minLength: 8)
+            Toggle("", isOn: isOn).labelsHidden()
+        }
+    }
+
+    // MARK: - Update check
+
+    /// The auto-check toggle keeps the switch in the same right-hand column as the others;
+    /// the quiet "检查更新" button rides just left of it. Only a genuinely available update
+    /// spends a second, prominent line — the common case stays one clean row.
+    private var updateSettingRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text("自动检查更新")
+                Spacer(minLength: 8)
+                updateStatusInline
+                Button {
+                    updateChecker.check(manual: true)
+                } label: {
+                    Text("检查更新")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.primary.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
+                .disabled(updateChecker.state == .checking)
+                Toggle("", isOn: $settings.autoCheckUpdates).labelsHidden()
+            }
+
+            if case .available(let version, let url) = updateChecker.state {
+                Button {
+                    NSWorkspace.shared.open(url)
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.down.circle.fill")
+                            .font(.system(size: 11))
+                        Text(String(format: L("有新版本 %@，点击下载"), version))
+                            .font(.system(size: 11.5, weight: .medium))
+                    }
+                    .foregroundStyle(Theme.accent)
+                }
+                .buttonStyle(.plain)
+                .transition(.opacity)
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: updateChecker.state)
+    }
+
+    /// The short, non-actionable states shown inline next to the check button. An available
+    /// update is deliberately excluded here — it gets its own line below.
+    @ViewBuilder
+    private var updateStatusInline: some View {
+        switch updateChecker.state {
+        case .checking:
+            ProgressView().controlSize(.small).scaleEffect(0.55)
+        case .upToDate:
+            Text("已是最新")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+        case .failed:
+            Text("检查失败")
+                .font(.system(size: 10.5))
+                .foregroundStyle(.tertiary)
+        case .idle, .available:
+            EmptyView()
+        }
     }
 
     // MARK: - Shortcuts

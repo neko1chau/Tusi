@@ -69,6 +69,9 @@ final class SettingsStore: ObservableObject {
     @Published var autoCopy: Bool {
         didSet { defaults.set(autoCopy, forKey: "autoCopy") }
     }
+    @Published var autoCheckUpdates: Bool {
+        didSet { defaults.set(autoCheckUpdates, forKey: "autoCheckUpdates") }
+    }
     @Published var tone: Tone {
         didSet { defaults.set(tone.rawValue, forKey: "tone") }
     }
@@ -119,6 +122,7 @@ final class SettingsStore: ObservableObject {
         primaryIndex = defaults.object(forKey: "primaryIndex") as? Int == 1 ? 1 : 0
         fallbackEnabled = defaults.object(forKey: "fallbackEnabled") as? Bool ?? true
         autoCopy = defaults.object(forKey: "autoCopy") as? Bool ?? true
+        autoCheckUpdates = defaults.object(forKey: "autoCheckUpdates") as? Bool ?? true
         tone = Tone(rawValue: defaults.string(forKey: "tone") ?? "") ?? .standard
         extraInstruction = defaults.string(forKey: "extraInstruction") ?? ""
         shortcuts = Self.loadShortcuts(defaults: defaults)

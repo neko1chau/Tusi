@@ -37,6 +37,14 @@
 "主用失败时自动切换到备用" = "Switch to backup automatically if primary fails";
 "翻译完成后自动复制" = "Copy automatically when translation finishes";
 "登录时启动" = "Launch at login";
+"自动检查更新" = "Check for updates automatically";
+
+/* MARK: - Update checking */
+"检查更新" = "Check for Updates";
+"已是最新" = "Up to date";
+"检查失败" = "Check failed";
+"有新版本 %@，点击下载" = "New version %@ available — click to download";
+"有新版本 %@ →" = "New version %@ →";
 "全局呼出快捷键注册失败，可能被其他应用占用；换一个组合键，或点菜单栏图标呼出" = "The global summon shortcut couldn't be registered — another app may already be using it. Try a different combination, or use the menu-bar icon instead.";
 "API Key 仅保存在本机钥匙串，不会上传" = "The API key is stored only in this Mac's Keychain, never uploaded";
 "返回 (Esc)" = "Back (Esc)";
