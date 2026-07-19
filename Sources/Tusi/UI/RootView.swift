@@ -19,11 +19,19 @@ struct RootView: View {
     var body: some View {
         ZStack(alignment: .top) {
             if panelState.showSettings {
-                SettingsView()
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
+                if panelState.showShortcuts {
+                    ShortcutsView()
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
+                } else {
+                    SettingsView()
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .trailing).combined(with: .opacity),
+                            removal: .move(edge: .trailing).combined(with: .opacity)
+                        ))
+                }
             } else {
                 TranslatorView()
                     .transition(.asymmetric(
@@ -47,5 +55,6 @@ struct RootView: View {
         // animate on the content's timeline while the window resizes on AppKit's, and the
         // gap between the two timelines is where the corners flash square.
         .animation(.snappy(duration: 0.25 * Theme.animationScale), value: panelState.showSettings)
+        .animation(.snappy(duration: 0.25 * Theme.animationScale), value: panelState.showShortcuts)
     }
 }

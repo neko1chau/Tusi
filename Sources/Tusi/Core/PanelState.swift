@@ -6,6 +6,14 @@ import Combine
 final class PanelState: ObservableObject {
     @Published var pinned = false
     @Published var showSettings = false
+    /// Shortcuts is a secondary page nested inside Settings — only meaningful while
+    /// `showSettings` is also true. Kept in PanelState (not SettingsView's own @State) so
+    /// navigating into it and back doesn't reset the rest of Settings.
+    @Published var showShortcuts = false
+    /// Which profile tab Settings has open. Lives here rather than as SettingsView's own
+    /// @State because a trip to the Shortcuts page unmounts and remounts SettingsView —
+    /// a local @State would silently reset back to the first tab on return.
+    @Published var settingsProfileIndex = 0
     /// When non-nil, the key monitor swallows the next keystroke and binds it to this action.
     @Published var recordingShortcut: ShortcutAction?
     /// Why the last recording attempt was rejected (conflict / missing modifier), shown in Settings.

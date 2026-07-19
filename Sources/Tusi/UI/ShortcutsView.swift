@@ -1,0 +1,119 @@
+import SwiftUI
+
+/// Secondary page nested inside Settings — see `PanelState.showShortcuts`.
+struct ShortcutsView: View {
+    @EnvironmentObject private var settings: SettingsStore
+    @EnvironmentObject private var panelState: PanelState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(ShortcutAction.allCases) { action in
+                    shortcutRow(action)
+                }
+
+                if let error = panelState.shortcutError {
+                    Text(error)
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(.orange)
+                        .transition(.opacity)
+                }
+            }
+            .animation(.snappy(duration: 0.18), value: panelState.recordingShortcut)
+            .animation(.snappy(duration: 0.18), value: panelState.shortcutError)
+        }
+        .padding(18)
+        // Leaving the page mid-recording would otherwise swallow the next keystroke
+        // typed into the translator.
+        .onDisappear {
+            panelState.recordingShortcut = nil
+            panelState.shortcutError = nil
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.snappy(duration: 0.25)) {
+                    panelState.showShortcuts = false
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.primary.opacity(0.06)))
+            }
+            .buttonStyle(.plain)
+            .help("返回 (Esc)")
+
+            Text("快捷键")
+                .font(.system(size: 14, weight: .semibold))
+
+            Spacer()
+        }
+    }
+
+    // MARK: - Rows
+
+    private func shortcutRow(_ action: ShortcutAction) -> some View {
+        let recording = panelState.recordingShortcut == action
+        let combo = settings.shortcut(action)
+        let isDefault = KeyCombo.sameKey(combo, action.defaultCombo)
+
+        return HStack(spacing: 8) {
+            Text(action.label)
+                .font(.system(size: 12.5))
+
+            Spacer()
+
+            if !isDefault && !recording {
+                Button {
+                    settings.setShortcut(action.defaultCombo, for: action)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                // Built explicitly rather than as an interpolated literal: matching the
+                // key SwiftUI would auto-generate for an interpolated LocalizedStringKey
+                // by hand (in Localizable.strings) is easy to get subtly wrong.
+                .help(String(format: L("恢复默认 %@"), action.defaultCombo.display))
+            }
+
+            Button {
+                if recording {
+                    panelState.recordingShortcut = nil
+                } else {
+                    panelState.recordingShortcut = action
+                }
+                panelState.shortcutError = nil
+            } label: {
+                // combo.display (e.g. "⇧⌘C") is a String, so this ternary can't rely on
+                // Text's automatic LocalizedStringKey lookup — the other branch needs L().
+                Text(recording ? L("按下新快捷键…") : combo.display)
+                    .font(.system(size: 11.5, weight: .medium, design: recording ? .default : .rounded))
+                    .foregroundStyle(recording ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
+                    .frame(minWidth: 62)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule().fill(Color.primary.opacity(recording ? 0.02 : 0.055))
+                    )
+                    .overlay(
+                        Capsule().strokeBorder(
+                            recording ? AnyShapeStyle(Theme.accent.opacity(0.6)) : AnyShapeStyle(Color.clear),
+                            lineWidth: 1
+                        )
+                    )
+            }
+            .buttonStyle(.plain)
+            .help(recording ? "按 Esc 取消" : "点击后按下新的组合键")
+        }
+    }
+}

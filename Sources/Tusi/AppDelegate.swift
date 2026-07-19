@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             panelState.pinned = true
             panelController.show()
             switch preview {
-            case "settings", "update-available", "update-latest":
+            case "settings", "update-available", "update-latest", "shortcuts":
                 settings.profiles = [
                     APIProfile(baseURL: "https://api.deepseek.com", apiKey: "sk-preview", model: "deepseek-chat"),
                     APIProfile(baseURL: "https://openrouter.ai/api/v1", apiKey: "sk-preview", model: "deepseek/deepseek-chat"),
@@ -67,6 +67,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     updateChecker.debugSetState(.available(version: "1.3.0", url: URL(string: "https://github.com/neko1chau/Tusi/releases/latest")!))
                 } else if preview == "update-latest" {
                     updateChecker.debugSetState(.upToDate)
+                } else if preview == "shortcuts" {
+                    panelState.showShortcuts = true
                 }
             case "empty":
                 panelState.showSettings = false

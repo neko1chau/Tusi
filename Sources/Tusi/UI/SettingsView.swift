@@ -5,7 +5,6 @@ struct SettingsView: View {
     @EnvironmentObject private var panelState: PanelState
     @EnvironmentObject private var updateChecker: UpdateChecker
 
-    @State private var editingIndex = 0
     @State private var showKey = false
     @State private var testStates: [Int: TestState] = [:]
 
@@ -17,6 +16,13 @@ struct SettingsView: View {
     }
 
     private var testState: TestState { testStates[editingIndex] ?? .idle }
+
+    // Lives in PanelState, not local @State: a trip to the Shortcuts secondary page
+    // unmounts and remounts this view, which would otherwise reset the selected tab.
+    private var editingIndex: Int {
+        get { panelState.settingsProfileIndex }
+        nonmutating set { panelState.settingsProfileIndex = newValue }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -65,14 +71,6 @@ struct SettingsView: View {
                 }
             }
 
-            HStack(spacing: 5) {
-                Image(systemName: "lock.fill")
-                    .font(.system(size: 9))
-                Text("API Key 仅保存在本机钥匙串，不会上传")
-            }
-            .font(.system(size: 10.5))
-            .foregroundStyle(.secondary)
-
             testRow
 
             SoftDivider()
@@ -86,7 +84,7 @@ struct SettingsView: View {
 
             SoftDivider()
 
-            shortcutsSection
+            shortcutsNavRow
 
             VStack(alignment: .leading, spacing: 10) {
                 settingToggle("主用失败时自动切换到备用", isOn: $settings.fallbackEnabled)
@@ -301,82 +299,25 @@ struct SettingsView: View {
 
     // MARK: - Shortcuts
 
-    private var shortcutsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("快捷键")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            ForEach(ShortcutAction.allCases) { action in
-                shortcutRow(action)
+    /// Entry point into the Shortcuts secondary page (see `PanelState.showShortcuts`) —
+    /// keeps this page from ballooning with a full per-action row list.
+    private var shortcutsNavRow: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.25)) {
+                panelState.showShortcuts = true
             }
-
-            if let error = panelState.shortcutError {
-                Text(error)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(.orange)
-                    .transition(.opacity)
+        } label: {
+            HStack {
+                Text("快捷键")
+                    .font(.system(size: 12.5))
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .contentShape(Rectangle())
         }
-        .animation(.snappy(duration: 0.18), value: panelState.recordingShortcut)
-        .animation(.snappy(duration: 0.18), value: panelState.shortcutError)
-    }
-
-    private func shortcutRow(_ action: ShortcutAction) -> some View {
-        let recording = panelState.recordingShortcut == action
-        let combo = settings.shortcut(action)
-        let isDefault = KeyCombo.sameKey(combo, action.defaultCombo)
-
-        return HStack(spacing: 8) {
-            Text(action.label)
-                .font(.system(size: 12.5))
-
-            Spacer()
-
-            if !isDefault && !recording {
-                Button {
-                    settings.setShortcut(action.defaultCombo, for: action)
-                } label: {
-                    Image(systemName: "arrow.uturn.backward")
-                        .font(.system(size: 10))
-                        .foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.plain)
-                // Built explicitly rather than as an interpolated literal: matching the
-                // key SwiftUI would auto-generate for an interpolated LocalizedStringKey
-                // by hand (in Localizable.strings) is easy to get subtly wrong.
-                .help(String(format: L("恢复默认 %@"), action.defaultCombo.display))
-            }
-
-            Button {
-                if recording {
-                    panelState.recordingShortcut = nil
-                } else {
-                    panelState.recordingShortcut = action
-                }
-                panelState.shortcutError = nil
-            } label: {
-                // combo.display (e.g. "⇧⌘C") is a String, so this ternary can't rely on
-                // Text's automatic LocalizedStringKey lookup — the other branch needs L().
-                Text(recording ? L("按下新快捷键…") : combo.display)
-                    .font(.system(size: 11.5, weight: .medium, design: recording ? .default : .rounded))
-                    .foregroundStyle(recording ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(.secondary))
-                    .frame(minWidth: 62)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(
-                        Capsule().fill(Color.primary.opacity(recording ? 0.02 : 0.055))
-                    )
-                    .overlay(
-                        Capsule().strokeBorder(
-                            recording ? AnyShapeStyle(Theme.accent.opacity(0.6)) : AnyShapeStyle(Color.clear),
-                            lineWidth: 1
-                        )
-                    )
-            }
-            .buttonStyle(.plain)
-            .help(recording ? "按 Esc 取消" : "点击后按下新的组合键")
-        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Fields
@@ -436,9 +377,20 @@ struct SettingsView: View {
             .buttonStyle(.plain)
             .disabled(testState == .testing || !settings.profiles[editingIndex].isUsable)
 
+            Spacer(minLength: 8)
+
+            // Right side shares one slot: the Keychain reassurance when idle, the test
+            // result while/after testing. They swap rather than stack because in English
+            // the button + status + full hint together overflow the row.
             switch testState {
             case .idle:
-                EmptyView()
+                HStack(spacing: 5) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9))
+                    Text("API Key 仅保存在本机钥匙串，不会上传")
+                }
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
             case .testing:
                 Text("连接中…")
                     .font(.system(size: 11.5))

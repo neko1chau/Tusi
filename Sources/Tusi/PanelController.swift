@@ -112,8 +112,11 @@ final class PanelController {
 
     func hide() {
         guard panel.isVisible else { return }
+        // Deliberately NOT NSApp.hide(nil): that call hands activation back to whichever
+        // app was frontmost before Tusi took it — exactly like ⌘H — which is what made the
+        // *previous* app's window jump forward on the second click (e.g. Telegram). Ordering
+        // the panel out is enough; the next real click elsewhere activates that app normally.
         panel.orderOut(nil)
-        NSApp.hide(nil)
     }
 
     private func position() {
@@ -181,9 +184,12 @@ final class PanelController {
                 return nil
             }
 
-            // Close / back — configurable (default Esc). Backs out of settings first.
+            // Close / back — configurable (default Esc). Backs out one level at a time:
+            // Shortcuts → Settings → Translator → hide.
             if self.settings.shortcut(.close).matches(event) {
-                if self.panelState.showSettings {
+                if self.panelState.showShortcuts {
+                    withAnimation(.snappy(duration: 0.25)) { self.panelState.showShortcuts = false }
+                } else if self.panelState.showSettings {
                     withAnimation(.snappy(duration: 0.25)) { self.panelState.showSettings = false }
                 } else {
                     self.hide()
