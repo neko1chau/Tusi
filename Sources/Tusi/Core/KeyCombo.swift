@@ -71,9 +71,12 @@ struct KeyCombo: Equatable {
     static func canonicalKeyCode(_ code: UInt16) -> UInt16 { code == 76 ? 36 : code }
 
     /// Caps lock is a state, not an intent — a shortcut shouldn't stop working because
-    /// it happens to be on.
+    /// it happens to be on. Numeric-keypad key events always carry `.numericPad`
+    /// regardless of which physical keys are held — without stripping it too, the
+    /// keypad Enter (already unified with Return above) would never match a combo
+    /// defined with the main Return key, and would fall through as a plain newline.
     static func normalized(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
-        flags.intersection(.deviceIndependentFlagsMask).subtracting(.capsLock)
+        flags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad])
     }
 
     static func describe(keyCode: UInt16, characters: String?, flags: NSEvent.ModifierFlags) -> String {
