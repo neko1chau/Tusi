@@ -12,7 +12,14 @@ final class TranslationEngine: ObservableObject {
     }
 
     @Published var input = "" {
-        didSet { updateDirection() }
+        didSet {
+            updateDirection()
+            // Deleting the whole draft — not just editing it — drops its translation too;
+            // otherwise the output no longer corresponds to anything in the input box.
+            if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                clearResult()
+            }
+        }
     }
     @Published private(set) var output = ""
     @Published private(set) var state: State = .idle
@@ -129,6 +136,16 @@ final class TranslationEngine: ObservableObject {
         translationTask?.cancel()
         translationTask = nil
         state = output.isEmpty ? .idle : .done
+    }
+
+    private func clearResult() {
+        guard state != .idle || !output.isEmpty else { return }
+        translationTask?.cancel()
+        translationTask = nil
+        output = ""
+        copied = false
+        toast = nil
+        state = .idle
     }
 
     /// Fills the panel with sample content for visual inspection (TUSI_PREVIEW).

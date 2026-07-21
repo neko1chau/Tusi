@@ -27,6 +27,7 @@
 "设置" = "Settings";
 "接口地址" = "Base URL";
 "模型" = "Model";
+"高级选项" = "Advanced";
 "供应商路由（可选）" = "Provider routing (optional)";
 "仅 OpenRouter 等支持 provider 参数的网关生效，如 novita，多个用逗号分隔" = "Only takes effect on gateways that support the provider parameter (e.g. OpenRouter), like novita. Separate multiple with commas.";
 "隐藏" = "Hide";

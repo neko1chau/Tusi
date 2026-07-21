@@ -7,6 +7,8 @@ struct SettingsView: View {
 
     @State private var showKey = false
     @State private var testStates: [Int: TestState] = [:]
+    @State private var shortcutsRowHovering = false
+    @State private var showAdvanced = false
 
     enum TestState: Equatable {
         case idle
@@ -41,12 +43,16 @@ struct SettingsView: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 12.5, design: .monospaced))
                 }
-                labeledField("供应商路由（可选）", hint: "仅 OpenRouter 等支持 provider 参数的网关生效，如 novita，多个用逗号分隔") {
-                    TextField("novita, together", text: $settings.profiles[editingIndex].providerOrder)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 12.5, design: .monospaced))
-                }
+                advancedSection
                 labeledField("API Key") {
+                    HStack(spacing: 5) {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 9))
+                        Text("API Key 仅保存在本机钥匙串，不会上传")
+                    }
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                } content: {
                     HStack(spacing: 6) {
                         Group {
                             if showKey {
@@ -315,9 +321,54 @@ struct SettingsView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(shortcutsRowHovering ? Color.primary.opacity(0.055) : Color.clear)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { shortcutsRowHovering = $0 }
+        .animation(.snappy(duration: 0.15), value: shortcutsRowHovering)
+    }
+
+    // MARK: - Advanced
+
+    /// Provider routing only matters for a handful of gateways and is empty for almost
+    /// everyone — collapsed by default so it doesn't cost every user a field + two lines
+    /// of explanation. Stays open on its own once it actually holds a value, so a
+    /// configured setting is never hidden behind a click.
+    private var advancedSection: some View {
+        let hasValue = !settings.profiles[editingIndex].providerOrder.trimmingCharacters(in: .whitespaces).isEmpty
+        let expanded = showAdvanced || hasValue
+        return VStack(alignment: .leading, spacing: 8) {
+            Button {
+                showAdvanced.toggle()
+            } label: {
+                HStack(spacing: 5) {
+                    Text("高级选项")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                labeledField("供应商路由（可选）", hint: "仅 OpenRouter 等支持 provider 参数的网关生效，如 novita，多个用逗号分隔") {
+                    TextField("novita, together", text: $settings.profiles[editingIndex].providerOrder)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12.5, design: .monospaced))
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.snappy(duration: 0.2), value: expanded)
     }
 
     // MARK: - Fields
@@ -325,11 +376,20 @@ struct SettingsView: View {
     // `label`/`hint` arrive as plain String params — literals live at each call site, one
     // level removed from these Text()s — so LocalizedStringKey(...) does the lookup that
     // Text(label) alone wouldn't.
-    private func labeledField(_ label: String, hint: String? = nil, @ViewBuilder content: () -> some View) -> some View {
+    private func labeledField(
+        _ label: String,
+        hint: String? = nil,
+        @ViewBuilder trailing: () -> some View = { EmptyView() },
+        @ViewBuilder content: () -> some View
+    ) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(LocalizedStringKey(label))
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text(LocalizedStringKey(label))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                trailing()
+            }
             content()
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
@@ -379,18 +439,11 @@ struct SettingsView: View {
 
             Spacer(minLength: 8)
 
-            // Right side shares one slot: the Keychain reassurance when idle, the test
-            // result while/after testing. They swap rather than stack because in English
-            // the button + status + full hint together overflow the row.
+            // The Keychain reassurance now lives up by the API Key label itself — this
+            // slot is only for test-in-flight/result feedback, so it's empty until then.
             switch testState {
             case .idle:
-                HStack(spacing: 5) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 9))
-                    Text("API Key 仅保存在本机钥匙串，不会上传")
-                }
-                .font(.system(size: 10.5))
-                .foregroundStyle(.secondary)
+                EmptyView()
             case .testing:
                 Text("连接中…")
                     .font(.system(size: 11.5))
